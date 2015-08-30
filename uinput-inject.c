@@ -1,5 +1,3 @@
-#include "config.h"
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -13,6 +11,8 @@
 
 #define KEYMASK 0xfff
 #define SHIFT 0x10000
+
+#include "config.h"
 
 static void check_posix(intmax_t rc, const char *fmt, ...)
 {
