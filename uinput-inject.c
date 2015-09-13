@@ -1,3 +1,4 @@
+#define _DEFAULT_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -9,10 +10,7 @@
 #include <linux/input.h>
 #include <linux/uinput.h>
 
-#define KEYMASK 0xfff
-#define SHIFT 0x10000
-
-#include "config.h"
+#include "uinput-key.h"
 
 static void check_posix(intmax_t rc, const char *fmt, ...)
 {
@@ -69,16 +67,33 @@ static int ev_key_click(int fd, int key)
     return ev_key(fd, key, 0);
 }
 
-int main(void)
+static int ev_inject_keypresses(int fd, const char *msg)
 {
+    for (const char *c = msg; *c; ++c) {
+        const int key = printable_to_key(*c);
+
+        if (ev_key_click(fd, key) < 0)
+            return -1;
+        if (key == KEY_ENTER)
+            usleep(500000);
+    }
+
+    return 0;
+}
+
+int main(int argc, char *argv[])
+{
+    if (argc < 2)
+        return -1;
+
     int fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
     check_posix(fd, "failed to open uinput");
 
     check_posix(ioctl(fd, UI_SET_EVBIT, EV_KEY), "failed to set EV_KEY");
     check_posix(ioctl(fd, UI_SET_KEYBIT, KEY_LEFTSHIFT), "failed to set UI_SET_KEYBIT");
 
-    for (const int *key = programmed_input; *key != 0; key++) {
-        check_posix(ioctl(fd, UI_SET_KEYBIT, *key & KEYMASK),
+    for (int key = KEY_1; key <= KEY_SPACE; ++key) {
+        check_posix(ioctl(fd, UI_SET_KEYBIT, key & KEYMASK),
                     "failed to set UI_SET_KEYBIT");
     }
 
@@ -95,11 +110,8 @@ int main(void)
     check_posix(ioctl(fd, UI_DEV_CREATE),
                 "failed to create uinput device");
 
-    for (const int *key = programmed_input; *key != 0; key++) {
-        ev_key_click(fd, *key);
-        if (*key == KEY_ENTER)
-            sleep(1);
-    }
+    usleep(500000);
+    ev_inject_keypresses(fd, argv[1]);
 
     ioctl(fd, UI_DEV_DESTROY);
     close(fd);
