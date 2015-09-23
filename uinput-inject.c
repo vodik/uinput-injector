@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <err.h>
@@ -67,15 +68,42 @@ static int ev_key_click(int fd, int key)
     return ev_key(fd, key, 0);
 }
 
+static int ev_inject_keypress(int fd, const char c)
+{
+    const int key = printable_to_key(c);
+    if (ev_key_click(fd, key) < 0)
+        return -1;
+    if (key == KEY_ENTER)
+        usleep(500000);
+    return 0;
+}
+
 static int ev_inject_keypresses(int fd, const char *msg)
 {
+    bool escaped = false;
     for (const char *c = msg; *c; ++c) {
-        const int key = printable_to_key(*c);
+        char key = *c;
 
-        if (ev_key_click(fd, key) < 0)
+        if (escaped) {
+            escaped = false;
+
+            if (key == 'n') {
+                if (ev_inject_keypress(fd, '\n') < 0)
+                    return -1;
+            } else if (key == 't') {
+                if (ev_inject_keypress(fd, '\t') < 0)
+                    return -1;
+            } else {
+                if (ev_inject_keypress(fd, '\\') < 0)
+                    return -1;
+                if (ev_inject_keypress(fd, key) < 0)
+                    return -1;
+            }
+        } else if (key == '\\') {
+            escaped = true;
+        } else if (ev_inject_keypress(fd, key) < 0) {
             return -1;
-        if (key == KEY_ENTER)
-            usleep(500000);
+        }
     }
 
     return 0;
